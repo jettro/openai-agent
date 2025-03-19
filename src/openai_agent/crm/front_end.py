@@ -1,6 +1,6 @@
 import os
 
-from agents import Agent, set_default_openai_key, Runner, RunConfig
+from agents import Agent, set_default_openai_key, Runner, RunConfig, RunResult
 from agents.extensions.handoff_prompt import RECOMMENDED_PROMPT_PREFIX
 from dotenv import load_dotenv
 
@@ -29,6 +29,22 @@ def create_front_end_agent():
         ]
     )
 
+
+def execute_agent(_agent: Agent, input_text: str | list, _user_info: UserInfo) -> RunResult:
+    if isinstance(input_text, list):
+        print(f"Agent '{_agent.name}' receives additional information '{input_text[-1]["content"]}'")
+    else:
+        print(f"Agent '{_agent.name}' receives the question '{input_text}'")
+
+    return Runner.run_sync(
+        starting_agent=_agent,
+        input=input_text,
+        run_config=RunConfig(workflow_name="Full Support Flow"),
+        context=_user_info
+    )
+
+
+
 if __name__ == "__main__":
     _ = load_dotenv()
     api_key = os.getenv('OPENAI_API_KEY')
@@ -39,11 +55,15 @@ if __name__ == "__main__":
     front_end_agent = create_front_end_agent()
 
     user_info = UserInfo(user_id="1", user_name="Jettro")
-    result  = Runner.run_sync(
-        starting_agent=front_end_agent,
-        input="I like to obtain information about my order with id 123.",
-        run_config=RunConfig(workflow_name="Contact front desk"),
-        context=user_info
-    )
+    result  = execute_agent(_agent=front_end_agent, input_text="I have a question about my order", _user_info=user_info)
+    print(f"Response from agent '{result.last_agent.name}'\n{result.final_output}")
 
-    print(result.final_output)
+    messages = result.to_input_list()
+    messages = messages + [{'role': 'user', 'content': 'My order ID is 123.'}]
+    result = execute_agent(_agent=result.last_agent, input_text=messages, _user_info=user_info)
+
+    print(f"Response from agent '{result.last_agent.name}'\n{result.final_output}")
+
+    # result = execute_agent(_agent=front_end_agent, input_text="What can you tell me about the vision of the company?", _user_info=user_info)
+    # print(f"Talking to agent '{result.last_agent.name}'")
+    # print(result.final_output)
